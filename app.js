@@ -1,4 +1,7 @@
-import express, { response } from 'express'
+import express from 'express'
+import bcrypt from 'bcryptjs'
+import { rateLimit } from 'express-rate-limit'
+import jwt from 'jsonwebtoken'
 
 const products = [
     {
@@ -83,24 +86,30 @@ const products = [
     }
 ]
 
+const users = []
+
 const server = express()
-
-// Permiso para que las peticiones puedan enviar body JSON
 server.use(express.json())
-
 const PORT = 3001
 
-// Base
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, 
+    limit: 5,
+    handler: (req, res) => {
+        return res.status(429).json({
+            error: "Demasiadas solicitudes, por favor intente de nuevo más tarde"
+        })
+    }
+})
+
 server.get("/", (req, res) => {
     res.json({ message: "Bienvenid@" })
 })
 
-// Obtener los productos
 server.get("/products", (req, res) => {
     res.json(products)
 })
 
-// Obtener un producto por su id
 server.get("/products/:id", (req, res) => {
     const id = Number(req.params.id)
     const foundProduct = products.find(product => product.id === id)
@@ -108,7 +117,6 @@ server.get("/products/:id", (req, res) => {
     res.json(foundProduct)
 })
 
-// Agregar un producto
 server.post("/products", (req, res) => {
     const body = req.body
     const newProduct = {
@@ -119,7 +127,6 @@ server.post("/products", (req, res) => {
     res.json(newProduct)
 })
 
-// Actualizar un producto
 server.put("/products/:id", (req, res) => {
     const id = Number(req.params.id)
     const body = req.body
@@ -133,7 +140,6 @@ server.put("/products/:id", (req, res) => {
     res.json(foundProduct)
 })
 
-// Eliminar un producto por su id
 server.delete("/products/:id", (req, res) => {
     const id = Number(req.params.id)
     const index = products.findIndex(product => product.id === id)
@@ -142,6 +148,50 @@ server.delete("/products/:id", (req, res) => {
     }
     products.splice(index, 1)
     res.json({ message: "Producto eliminado" })
+})
+
+server.post("/auth/register", async (req, res) => {
+    const body = req.body
+    const id = users.length + 1
+    const { username, email, password } = body
+    const foundUser = users.find(user => user.email === email)
+    if (foundUser) {
+        return res.status(409).json({ error: "El usuario ya existe" })
+    }
+    const hashPassword = await bcrypt.hash(password, 10)
+    const newUser = {
+        id,
+        username,
+        email,
+        password: hashPassword
+    }
+    users.push(newUser)
+    const { password: passwordNewUser, ...data } = newUser
+    res.json(data)
+})
+
+server.post("/auth/login", limiter, async (req, res) => {
+    const body = req.body
+    const { email, password } = body
+    if (!email || !password) {
+        return res.status(401).json({ error: "No autorizado" })
+    }
+    const foundUser = users.find(user => user.email === email)
+    if (!foundUser) {
+        return res.status(401).json({ error: "No autorizado" })
+    }
+    const isValid = await bcrypt.compare(password, foundUser.password)
+    if (!isValid) {
+        return res.status(401).json({ error: "No autorizado" })
+    }
+
+    const payload = { id: foundUser.id, username: foundUser.username, email: foundUser.email }
+    const secretKey = "contraseñasegurayprivada"
+    const token = jwt.sign(payload, secretKey, { expiresIn: "1m" })
+
+    res.json({ token })
+
+    //res.status(202).json({ status: "Logueado con éxito" })
 })
 
 server.listen(PORT, () => {
