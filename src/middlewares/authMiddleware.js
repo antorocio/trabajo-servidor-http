@@ -10,7 +10,7 @@ const authMiddleware = (req, res, next) => {
     const token = header.split(" ")[1]
 
     try {
-        const decoded = jwt.verify(token, "contraseñasegurayprivada")
+        const decoded = jwt.verify(token, process.env.JWT_SECRET)
         req.userLogged = decoded
         next()
     } catch (error) {

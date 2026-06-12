@@ -49,35 +49,36 @@ const register = async (req, res) => {
 }
 
 const login = async (req, res) => {
-try {
+    try {
         const body = req.body
-    const { email, password } = body
+        const { email, password } = body
 
-    if (!email || !password) {
-        return res.status(401).json({ success: false, error: "No autorizado" })
+        if (!email || !password) {
+            return res.status(401).json({ success: false, error: "No autorizado" })
+        }
+
+        const foundUser = await User.findOne({ email })
+
+        if (!foundUser) { return res.status(401).json({ success: false, error: "No autorizado" }) }
+
+        const isValid = await bcrypt.compare(password, foundUser.password)
+
+        if (!isValid) { return res.status(401).json({ success: false, error: "No autorizado" }) }
+
+        const payload = { id: foundUser._id, username: foundUser.username, email: foundUser.email }
+
+        const token = jwt.sign(payload, process.env.JWT_SECRET, {
+            expiresIn: "1h"
+        })
+
+        res.json({
+            success: true,
+            data: token,
+            message: "Token generado correctamente"
+        })
+    } catch (error) {
+        res.status(500).json({ success: false, error: "Error al logguear" })
     }
-
-    const foundUser = await User.findOne({ email })
-
-    if (!foundUser) { return res.status(401).json({ success: false, error: "No autorizado" }) }
-
-    const isValid = await bcrypt.compare(password, foundUser.password)
-
-    if (!isValid) { return res.status(401).json({ success: false, error: "No autorizado" }) }
-
-    const payload = { id: foundUser._id, username: foundUser.username, email: foundUser.email }
-    const secretKey = "contraseñasegurayprivada"
-
-    const token = jwt.sign(payload, secretKey, { expiresIn: "1h" })
-
-    res.json({
-        success: true,
-        data: token,
-        message: "Token generado correctamente"
-    })
-} catch (error) {
-    res.status(500).json({ success: false, error: "Error al logguear" })
-}
 }
 
 export { register, login }
